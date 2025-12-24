@@ -12,6 +12,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
 import com.test.dao.ReaderDAO;
+import com.test.dao.RecordDAO;
 import com.test.pojo.Reader;
 import com.test.pojo.ReaderCriteria;
 import com.test.pojo.PageInfo;
@@ -25,6 +26,7 @@ import com.test.util.SystemConstants;
 @WebServlet("/reader")
 public class ReaderServlet extends HttpServlet {
     private ReaderDAO readerDAO = new ReaderDAO();
+    private RecordDAO recordDAO = new RecordDAO();
 
     /**
      * 根据 act 参数分发到不同的处理方法，默认展示列表。
@@ -170,6 +172,12 @@ public class ReaderServlet extends HttpServlet {
         List<Integer> ids = parseResult.getIds();
         if (ids.isEmpty()) {
             session.setAttribute("message", "请选择要删除的用户");
+            response.sendRedirect(request.getContextPath() + "/reader?act=list");
+            return;
+        }
+        int notReturnedCount = recordDAO.countBorrowingByUserIds(ids);
+        if (notReturnedCount > 0) {
+            session.setAttribute("message", "存在未归还的借阅记录，无法删除用户");
             response.sendRedirect(request.getContextPath() + "/reader?act=list");
             return;
         }
