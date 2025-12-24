@@ -11,6 +11,7 @@ import com.test.pojo.BookCriteria;
 import com.test.pojo.Record;
 import com.test.pojo.RecordCriteria;
 import com.test.util.DbUtils;
+import com.test.util.SystemConstants;
 
 /**
  * 借阅记录数据访问对象，负责 book_record 表的查询、新增与更新。
@@ -23,9 +24,10 @@ public class RecordDAO {
     public List<Record> selectList(RecordCriteria criteria) {
         // 语法 select 字段1(主键),字段2(展示名) from 父类表名
         String sql =
-            "select r.id,book_id,user_id,borrow_time,return_time,expire_time,r.status,price,book_title,u.name,u.id_card "
+            "select r.id,book_id,user_id,borrow_time,return_time,expire_time,r.status,price,book_title,"
+                + "coalesce(u.name,'已删除的用户') as name,coalesce(u.id_card,'已删除的用户') as id_card "
                 + "from book_record r "
-                + "inner join book_reader u on u.id=r.user_id where 1=1 ";
+                + "left join book_reader u on u.id=r.user_id where 1=1 ";
         List param = new ArrayList();
         if (criteria.getStatus() != null) {
             sql += " and r.status =? ";
@@ -91,7 +93,7 @@ public class RecordDAO {
      */
     public int getCount(RecordCriteria criteria) {
         String sql = "select count(*) from book_record r"
-            + " inner join book_reader u on u.id=r.user_id where 1=1 ";
+            + " left join book_reader u on u.id=r.user_id where 1=1 ";
 
         List param = new ArrayList();
         if (criteria.getStatus() != null) {
@@ -200,6 +202,42 @@ public class RecordDAO {
         param.add(record.getPrice());
         param.add(record.getId());
         return DbUtils.executeUpdate(sql, param);
+    }
+
+    /**
+     * 统计指定用户列表中处于借阅中的记录数量，用于删除用户前的校验。
+     */
+    public int countBorrowingByUserIds(List<Integer> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return 0;
+        }
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < userIds.size(); i++) {
+            placeholders.append("?");
+            if (i < userIds.size() - 1) {
+                placeholders.append(",");
+            }
+        }
+        String sql = "select count(*) from book_record where status=? and user_id in (" + placeholders + ")";
+        List param = new ArrayList();
+        param.add(SystemConstants.RECORD_BORROW);
+        param.addAll(userIds);
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+        try {
+            connection = DbUtils.open();
+            statement = DbUtils.preparedStatement(sql, param, connection);
+            resultSet = statement.executeQuery();
+            if (resultSet.next()) {
+                return resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+            DbUtils.closeAll(connection, statement, resultSet);
+        }
+        return 0;
     }
 
 }
